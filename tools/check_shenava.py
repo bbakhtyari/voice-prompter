@@ -1,59 +1,91 @@
 #!/usr/bin/env python3
-"""Sanity check, run by the GitHub workflow: does the shrunken model still hear Persian?
+"""Sanity check, run by the GitHub workflow: do the shrunken models still hear Persian?
 
-Persian speech is made with a text-to-speech voice, then recognised with the
-original model and with the 8-bit one. The log shows both, with timings.
+A few real Persian recordings (FLEURS test set, with reference text) are
+recognised with each original model and with its 8-bit version. The log shows
+the texts, the word error rate and the speed, so a bad model is noticed before
+the APK is handed out.
 """
-import glob
+import io
 import os
+import re
 import sys
 import time
 
 import numpy as np
+import requests
 import sherpa_onnx
+import soundfile as sf
 
-TEXT = "سلام رفیق. امروز می‌خوام یه حرف مهم با تو بزنم. می‌دونم که خسته‌ای ولی تو می‌تونی ادامه بدی."
-TTS = "vits-piper-fa_IR-amir-medium"
-
-
-def speak():
-    onnx_files = glob.glob(f"{TTS}/*.onnx")
-    cfg = sherpa_onnx.OfflineTtsConfig(
-        model=sherpa_onnx.OfflineTtsModelConfig(
-            vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-                model=onnx_files[0], tokens=f"{TTS}/tokens.txt", data_dir=f"{TTS}/espeak-ng-data"
-            ),
-            num_threads=2,
-        )
-    )
-    audio = sherpa_onnx.OfflineTts(cfg).generate(TEXT, sid=0, speed=1.0)
-    return np.asarray(audio.samples, dtype=np.float32), audio.sample_rate
+ROWS = ("https://datasets-server.huggingface.co/first-rows"
+        "?dataset=google%2Ffleurs&config=fa_ir&split=test")
+N = 6
 
 
-def hear(model, tokens, samples, rate):
-    rec = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(model=model, tokens=tokens, num_threads=4)
-    t0 = time.time()
-    s = rec.create_stream()
-    s.accept_waveform(rate, samples)
-    rec.decode_stream(s)
-    return s.result.text, time.time() - t0
+def norm(t):
+    t = t.replace("ي", "ی").replace("ك", "ک").replace("‌", " ")
+    t = re.sub(r"[ً-ٰٟ]", "", t)
+    t = re.sub(r"[^\w\s]", " ", t)
+    return t.split()
+
+
+def wer_counts(ref, hyp):
+    d = list(range(len(hyp) + 1))
+    for i in range(1, len(ref) + 1):
+        prev, d[0] = d[0], i
+        for j in range(1, len(hyp) + 1):
+            cur = d[j]
+            d[j] = min(d[j] + 1, d[j - 1] + 1, prev + (ref[i - 1] != hyp[j - 1]))
+            prev = cur
+    return d[len(hyp)], len(ref)
+
+
+def samples():
+    rows = requests.get(ROWS, timeout=60).json()["rows"][:N]
+    out = []
+    for r in rows:
+        row = r["row"]
+        data = requests.get(row["audio"][0]["src"], timeout=120).content
+        wav, rate = sf.read(io.BytesIO(data), dtype="float32", always_2d=True)
+        out.append((wav[:, 0].copy(), rate, row.get("transcription") or row.get("raw_transcription") or ""))
+    return out
 
 
 def main():
-    samples, rate = speak()
-    secs = len(samples) / rate
-    print(f"spoken text : {TEXT}\naudio       : {secs:.1f} s at {rate} Hz", flush=True)
+    try:
+        data = samples()
+    except Exception as e:  # the check is a bonus; never block the build on it
+        print(f"could not fetch test recordings: {e!r}")
+        return 0
+    total = sum(len(w) / r for w, r, _ in data)
+    print(f"{len(data)} recordings, {total:.0f} s of speech", flush=True)
     for name in ("shenava-rizeh", "shenava-koochik"):
         tokens = f"app/src/main/assets/{name}/tokens.txt"
         for label, model in (
             ("original", f"build-shenava/{name}/model.onnx"),
-            ("8-bit   ", f"app/src/main/assets/{name}/model.int8.onnx"),
+            ("8-bit", f"app/src/main/assets/{name}/model.int8.onnx"),
         ):
             if not os.path.isfile(model):
                 print(f"{name} {label}: file missing")
                 continue
-            text, dt = hear(model, tokens, samples, rate)
-            print(f"{name} {label}: {dt:.2f} s (x{dt / secs:.2f} real time)  ->  {text}", flush=True)
+            rec = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(model=model, tokens=tokens, num_threads=4)
+            errs = words = 0
+            t0 = time.time()
+            texts = []
+            for wav, rate, ref in data:
+                s = rec.create_stream()
+                s.accept_waveform(rate, wav)
+                rec.decode_stream(s)
+                texts.append((ref, s.result.text))
+                e, n = wer_counts(norm(ref), norm(s.result.text))
+                errs += e
+                words += n
+            dt = time.time() - t0
+            print(f"\n### {name} / {label}: WER {100 * errs / max(1, words):.1f}%  "
+                  f"speed x{dt / total:.3f} real time", flush=True)
+            for ref, hyp in texts[:3]:
+                print(f"   ref: {ref}\n   got: {hyp}", flush=True)
+    return 0
 
 
 if __name__ == "__main__":

@@ -68,13 +68,11 @@ jobs:
           python3 tools/prepare_shenava.py
           ls -lh app/src/main/assets/shenava-*/
 
-      - name: Check the Shenava models on synthetic Persian speech
+      - name: Check the Shenava models on real Persian speech
         if: steps.shenava.outcome == 'success'
         continue-on-error: true
         run: |
-          curl -fL --retry 3 -o tts.tar.bz2 \
-            https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fa_IR-amir-medium.tar.bz2
-          tar xjf tts.tar.bz2
+          python3 -m pip install -q soundfile requests
           python3 tools/check_shenava.py
 
       - name: Build the Shenava APK
