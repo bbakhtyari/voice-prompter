@@ -54,6 +54,8 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     /** Auto "go back" fires once, then waits until the speaker is following the text again. */
     private boolean retakeArmed = true;
     private String notice = "";
+    private int activeEngine;
+    private int decodeMs;
     private boolean pendingRestore = true;
     private int anchorWord;
     private double posY, targetY;
@@ -103,6 +105,15 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
                     .putBoolean(Prefs.RESTRICT, false)
                     .apply();
             toast("«محدود کردن لغات» با این مدل سازگار نبود و خاموش شد.");
+        }
+
+        if (Prefs.sp(this).getBoolean(Prefs.ENGINE_GUARD, false)) {
+            // The previous run died while a Shenava model was loaded.
+            Prefs.sp(this).edit()
+                    .putBoolean(Prefs.ENGINE_GUARD, false)
+                    .putInt(Prefs.ENGINE, Engines.VOSK)
+                    .apply();
+            toast("موتور Shenava دفعه‌ی قبل برنامه رو بست؛ برگشتم به Vosk.");
         }
 
         fontSp = Prefs.i(this, Prefs.FONT_SP);
@@ -494,7 +505,8 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     /** Starts the recogniser (paused). Returns false when it could not be started right now. */
     private boolean startVoice() {
         if (engine.isRunning()) return true;
-        if (!ModelStore.isInstalled(this)) {
+        final int which = Engines.effective(this);
+        if (which == Engines.VOSK && !ModelStore.isInstalled(this)) {
             voiceMode = false;
             toast("مدل گفتار فارسی نصب نیست. از صفحه‌ی اول نصبش کن.");
             updateUi();
@@ -518,7 +530,9 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         }
         engineReady = false;
         engineInfo = "";
-        engine.start(body, Prefs.b(this, Prefs.RESTRICT), Prefs.i(this, Prefs.MIC));
+        activeEngine = which;
+        decodeMs = 0;
+        engine.start(body, Prefs.b(this, Prefs.RESTRICT), Prefs.i(this, Prefs.MIC), which);
         engine.setPaused(!playing);
         return true;
     }
@@ -554,7 +568,10 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         if (!voiceMode || !playing) return;
         if (!hyp.isEmpty() && !hyp.equals(lastHeard)) {
             lastHeard = hyp;
-            if (heard.getVisibility() == View.VISIBLE) heard.setText(hyp);
+            if (heard.getVisibility() == View.VISIBLE) {
+                // for Shenava also show how long recognition took, to judge the delay
+                heard.setText(activeEngine == Engines.VOSK ? hyp : "[" + decodeMs + "ms] " + hyp);
+            }
         }
         if (tracker.onHypothesis(hyp, isFinal)) {
             targetY = yFor(tracker.position());
@@ -564,6 +581,11 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
                 && MistakeDetector.isMistake(tracker, isFinal, Prefs.i(this, Prefs.RETAKE_SENS))) {
             retake();
         }
+    }
+
+    @Override
+    public void onDecodeTime(int millis) {
+        decodeMs = millis;
     }
 
     @Override
@@ -615,8 +637,8 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         if (!notice.isEmpty()) s = notice;
         else if (!voiceMode) s = playing ? "" : "دستی — سرعت " + speed;
         else if (waitingForPermission) s = "منتظر اجازه‌ی میکروفون";
-        else if (!engineReady) s = "در حال بارگذاری مدل فارسی…";
-        else s = playing ? "" : "آماده — پخش رو بزن و شروع کن به خوندن";
+        else if (!engineReady) s = "در حال بارگذاری " + Engines.shortName(activeEngine) + "…";
+        else s = playing ? "" : Engines.shortName(activeEngine) + " آماده — پخش رو بزن و شروع کن به خوندن";
         status.setText(s);
         status.setVisibility(s.isEmpty() ? View.GONE : View.VISIBLE);
     }

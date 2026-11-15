@@ -6,3 +6,6 @@ local.properties
 *.iml
 # The Persian speech model is downloaded at build time (see README)
 app/src/main/assets/model-fa.zip
+# Shenava models and the sherpa-onnx library are also fetched at build time
+app/src/main/assets/shenava-*/
+app/libs/

@@ -45,14 +45,61 @@ jobs:
       - name: Rename
         run: cp app/build/outputs/apk/release/app-release.apk VoicePrompterFa.apk
 
+      # ---- second APK: the same app plus the Shenava engine -----------------
+      # Needs the sherpa-onnx library and the Shenava models; if anything here
+      # fails, the normal APK above is still published.
+      - name: Fetch sherpa-onnx and Shenava models
+        id: shenava
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p app/libs
+          got=""
+          for v in 2.0.1 1.13.8; do
+            if curl -fL --retry 3 -o app/libs/sherpa-onnx.aar \
+                 "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$v/sherpa-onnx-$v.aar"; then
+              got=$v; break
+            fi
+          done
+          test -n "$got" || { rm -f app/libs/sherpa-onnx.aar; echo "sherpa-onnx AAR not found"; exit 1; }
+          echo "sherpa-onnx $got"
+          unzip -l app/libs/sherpa-onnx.aar | grep -E "\.so|classes.jar"
+          python3 -m pip install -q onnx onnxruntime huggingface_hub sherpa-onnx numpy
+          python3 tools/prepare_shenava.py
+          ls -lh app/src/main/assets/shenava-*/
+
+      - name: Check the Shenava models on synthetic Persian speech
+        if: steps.shenava.outcome == 'success'
+        continue-on-error: true
+        run: |
+          curl -fL --retry 3 -o tts.tar.bz2 \
+            https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fa_IR-amir-medium.tar.bz2
+          tar xjf tts.tar.bz2
+          python3 tools/check_shenava.py
+
+      - name: Build the Shenava APK
+        id: shenava_apk
+        if: steps.shenava.outcome == 'success'
+        continue-on-error: true
+        run: |
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk VoicePrompterFa-shenava.apk
+          ls -lh *.apk
+
+      - name: Remove a half-fetched library
+        if: steps.shenava.outcome != 'success'
+        run: rm -f app/libs/sherpa-onnx.aar
+
       - uses: actions/upload-artifact@v4
         with:
           name: VoicePrompterFa
-          path: VoicePrompterFa.apk
+          path: "*.apk"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
-          files: VoicePrompterFa.apk
+          files: |
+            VoicePrompterFa.apk
+            VoicePrompterFa-shenava.apk

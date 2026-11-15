@@ -70,6 +70,7 @@ public class SettingsActivity extends Activity {
         note("ظاهر برنامه همیشه تیره است: زمینه‌ی مشکی و متن سفید.");
 
         header("حالت صدا");
+        engineRow();
         choice("میکروفون", Prefs.MIC, new String[]{
                 "خودکار (پیش‌فرض دستگاه)", "میکروفون خود تبلت", "هدست بلوتوث"});
         toggle("محدود کردن لغات به کلمه‌های متن (دقت بیشتر)", Prefs.RESTRICT);
@@ -168,6 +169,36 @@ public class SettingsActivity extends Activity {
                 .show());
         box.addView(b, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    /** Lets the user pick a speech engine among those this build contains. */
+    private void engineRow() {
+        final List<Integer> have = new ArrayList<>();
+        for (int e : Engines.ALL) {
+            if (Engines.available(this, e)) have.add(e);
+        }
+        final Button b = rowButton();
+        b.setText("موتور تشخیص گفتار: " + Engines.label(Engines.effective(this)));
+        b.setOnClickListener(v -> {
+            String[] labels = new String[have.size()];
+            for (int i = 0; i < labels.length; i++) labels[i] = Engines.label(have.get(i));
+            new AlertDialog.Builder(this)
+                    .setTitle("موتور تشخیص گفتار")
+                    .setItems(labels, (d, which) -> {
+                        Prefs.put(this, Prefs.ENGINE, have.get(which));
+                        build();
+                    })
+                    .show();
+        });
+        box.addView(b, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (have.size() == 1) {
+            note("این نسخه فقط Vosk داره. برای انتخاب Shenava نسخه‌ی shenava برنامه رو نصب کن.");
+        } else {
+            note("Shenava مدل بزرگ‌تریه ولی هر چند لحظه یک‌بار صدا رو از نو تشخیص می‌ده، پس متن ممکنه "
+                    + "با تأخیر بیشتری جلو بیاد. عدد داخل [ ] در خط پایین صفحه زمان هر تشخیص رو نشون می‌ده. "
+                    + "«محدود کردن لغات» فقط روی Vosk اثر داره.");
+        }
     }
 
     private void fontRow() {

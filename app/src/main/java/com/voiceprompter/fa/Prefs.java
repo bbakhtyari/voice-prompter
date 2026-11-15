@@ -13,6 +13,8 @@ public final class Prefs {
     public static final String READ_POS = "read_pos_pct";
     public static final String SPEED = "speed";
     public static final String MIC = "mic_source";
+    /** Speech engine: 0 = Vosk, 1 = Shenava Rizeh, 2 = Shenava Koochik. */
+    public static final String ENGINE = "engine";
 
     public static final String MIRROR_H = "mirror_h";
     public static final String MIRROR_V = "mirror_v";
@@ -33,6 +35,8 @@ public final class Prefs {
 
     /** Set while a vocabulary-restricted recogniser is being created (crash guard). */
     public static final String GRAMMAR_GUARD = "grammar_guard";
+    /** Set while a Shenava model is loaded (crash guard). */
+    public static final String ENGINE_GUARD = "engine_guard";
     public static final String SEEDED = "seeded";
 
     public static SharedPreferences sp(Context c) {
