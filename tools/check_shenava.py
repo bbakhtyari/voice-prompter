@@ -17,8 +17,10 @@ import requests
 import sherpa_onnx
 import soundfile as sf
 
-ROWS = ("https://datasets-server.huggingface.co/first-rows"
-        "?dataset=google%2Ffleurs&config=fa_ir&split=test")
+API = "https://datasets-server.huggingface.co"
+# Persian speech sets with reference text; the first one that can be read is used.
+DATASETS = ("Reza2kn/visualears-golden-6669", "google/fleurs", "Reza2kn/visualears-persian-asr-16k")
+TEXT_KEYS = ("transcription", "text", "sentence", "normalized_text", "raw_transcription", "transcript")
 N = 6
 
 
@@ -40,15 +42,40 @@ def wer_counts(ref, hyp):
     return d[len(hyp)], len(ref)
 
 
+def first_rows(dataset):
+    splits = requests.get(f"{API}/splits", params={"dataset": dataset}, timeout=60).json()
+    if "splits" not in splits:
+        raise RuntimeError(f"no splits: {str(splits)[:200]}")
+    cands = splits["splits"]
+    cands.sort(key=lambda x: (("fa" not in x["config"].lower()) and x["config"] != "default", x["split"] != "test"))
+    pick = cands[0]
+    rows = requests.get(f"{API}/first-rows", timeout=60, params={
+        "dataset": dataset, "config": pick["config"], "split": pick["split"]}).json()
+    if "rows" not in rows:
+        raise RuntimeError(f"no rows: {str(rows)[:200]}")
+    return rows["rows"]
+
+
 def samples():
-    rows = requests.get(ROWS, timeout=60).json()["rows"][:N]
-    out = []
-    for r in rows:
-        row = r["row"]
-        data = requests.get(row["audio"][0]["src"], timeout=120).content
-        wav, rate = sf.read(io.BytesIO(data), dtype="float32", always_2d=True)
-        out.append((wav[:, 0].copy(), rate, row.get("transcription") or row.get("raw_transcription") or ""))
-    return out
+    last = None
+    for dataset in DATASETS:
+        try:
+            out = []
+            for r in first_rows(dataset)[:N]:
+                row = r["row"]
+                audio = next(v for v in row.values()
+                             if isinstance(v, list) and v and isinstance(v[0], dict) and "src" in v[0])
+                ref = next((row[k] for k in TEXT_KEYS if isinstance(row.get(k), str) and row[k]), "")
+                data = requests.get(audio[0]["src"], timeout=120).content
+                wav, rate = sf.read(io.BytesIO(data), dtype="float32", always_2d=True)
+                out.append((wav[:, 0].copy(), rate, ref))
+            if out:
+                print(f"test recordings from {dataset}", flush=True)
+                return out
+        except Exception as e:
+            last = e
+            print(f"   {dataset}: {e!r}", flush=True)
+    raise RuntimeError(f"no test set could be read ({last!r})")
 
 
 def main():
