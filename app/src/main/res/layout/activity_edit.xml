@@ -60,5 +60,13 @@
             android:layout_weight="1.4"
             android:text="از فایل txt"
             android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/btnEditSettings"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1.2"
+            android:text="تنظیمات"
+            android:textSize="16sp" />
     </LinearLayout>
 </LinearLayout>

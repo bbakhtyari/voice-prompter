@@ -2,6 +2,7 @@ package com.voiceprompter.fa;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -144,6 +145,8 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         findViewById(R.id.btnFaster).setOnClickListener(v -> perform(Keys.FASTER));
         findViewById(R.id.btnFontDown).setOnClickListener(v -> changeFont(-4));
         findViewById(R.id.btnFontUp).setOnClickListener(v -> changeFont(4));
+        findViewById(R.id.btnPrompterSettings).setOnClickListener(
+                v -> startActivity(new Intent(this, SettingsActivity.class)));
         btnRotate.setOnClickListener(v -> {
             // follow the device -> locked landscape -> locked portrait -> ...
             int o = Prefs.i(this, Prefs.ORIENT);
@@ -166,6 +169,11 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         super.onResume();
         resumed = true;
         hideSystemUi();
+        // settings may have been changed while we were away
+        fontSp = Prefs.i(this, Prefs.FONT_SP);
+        speed = Prefs.i(this, Prefs.SPEED);
+        applyOrientation();
+        applyStyle();
         lastFrame = 0;
         Choreographer.getInstance().postFrameCallback(this);
         if (voiceMode) startVoice();

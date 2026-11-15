@@ -49,6 +49,8 @@ public class EditActivity extends Activity {
                 startActivity(new Intent(this, PrompterActivity.class).putExtra(PrompterActivity.EXTRA_ID, id));
             }
         });
+        findViewById(R.id.btnEditSettings).setOnClickListener(
+                v -> startActivity(new Intent(this, SettingsActivity.class)));
         findViewById(R.id.btnImport).setOnClickListener(v -> {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
