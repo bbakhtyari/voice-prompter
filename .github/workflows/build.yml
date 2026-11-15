@@ -1,0 +1,58 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master, 'claude/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The Persian speech model (about 50 MB) is packed into the APK so the
+      # tablet needs no internet. If the download fails the build still
+      # succeeds and the app asks for the model zip on first start.
+      - name: Download Persian speech model
+        run: |
+          mkdir -p app/src/main/assets
+          if curl -fL --retry 3 --retry-delay 5 -o app/src/main/assets/model-fa.zip "$MODEL_URL" \
+             && unzip -tq app/src/main/assets/model-fa.zip > /dev/null; then
+            ls -lh app/src/main/assets/model-fa.zip
+          else
+            rm -f app/src/main/assets/model-fa.zip
+            echo "::warning::Persian model could not be downloaded; APK is built without it."
+          fi
+        env:
+          MODEL_URL: https://alphacephei.com/vosk/models/vosk-model-small-fa-0.42.zip
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Rename
+        run: cp app/build/outputs/apk/release/app-release.apk VoicePrompterFa.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoicePrompterFa
+          path: VoicePrompterFa.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          files: VoicePrompterFa.apk
