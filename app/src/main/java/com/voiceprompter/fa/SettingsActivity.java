@@ -59,6 +59,9 @@ public class SettingsActivity extends Activity {
         slider("فاصله‌ی خط‌ها", Prefs.LINE_SPACING, 10, 25, " (÷۱۰)");
         slider("حاشیه‌ی دو طرف متن", Prefs.MARGIN, 0, 40, "٪");
         slider("جای خط خوندن از بالای صفحه", Prefs.READ_POS, 10, 70, "٪");
+        choice("چرخش صفحه‌ی تله‌پرامپتر", Prefs.ORIENT, new String[]{
+                "آزاد (با چرخوندن تبلت می‌چرخه)", "قفل روی افقی", "قفل روی عمودی",
+                "قفل روی افقی (برعکس)", "قفل روی عمودی (برعکس)"});
         toggle("آینه‌ی افقی (برای شیشه‌ی تله‌پرامپتر)", Prefs.MIRROR_H);
         toggle("آینه‌ی عمودی", Prefs.MIRROR_V);
         choice("چینش متن", Prefs.ALIGN, new String[]{"راست‌چین", "وسط‌چین", "چپ‌چین"});

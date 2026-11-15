@@ -19,6 +19,8 @@ public final class Prefs {
     /** 0 = right, 1 = centre, 2 = left. */
     public static final String ALIGN = "align";
     public static final String BOLD = "bold";
+    /** Screen rotation: 0 = follow the device, 1 = landscape, 2 = portrait, 3/4 = the same, upside down. */
+    public static final String ORIENT = "orientation";
     /** "" = Vazirmatn, "system" = device font, otherwise the file name of an imported font. */
     public static final String FONT = "font_name";
     /** Stop and go two lines back when the speaker slips. */

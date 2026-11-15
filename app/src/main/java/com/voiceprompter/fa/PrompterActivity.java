@@ -2,6 +2,7 @@ package com.voiceprompter.fa;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.os.Build;
@@ -38,7 +39,7 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     private NoFlingScrollView scroll;
     private TextView text, heard, status, speedLabel;
     private View marker, level, controls;
-    private Button btnPlay, btnMode;
+    private Button btnPlay, btnMode, btnRotate;
 
     private String body = "";
     private ScriptIndex index;
@@ -65,6 +66,7 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        applyOrientation();
         setContentView(R.layout.activity_prompter);
 
         scroll = findViewById(R.id.scroll);
@@ -77,6 +79,7 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         controls = findViewById(R.id.controls);
         btnPlay = findViewById(R.id.btnPlay);
         btnMode = findViewById(R.id.btnMode);
+        btnRotate = findViewById(R.id.btnRotate);
 
         String id = getIntent().getStringExtra(EXTRA_ID);
         String[] script = id == null ? null : ScriptStore.load(this, id);
@@ -141,6 +144,13 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         findViewById(R.id.btnFaster).setOnClickListener(v -> perform(Keys.FASTER));
         findViewById(R.id.btnFontDown).setOnClickListener(v -> changeFont(-4));
         findViewById(R.id.btnFontUp).setOnClickListener(v -> changeFont(4));
+        btnRotate.setOnClickListener(v -> {
+            // follow the device -> locked landscape -> locked portrait -> ...
+            int o = Prefs.i(this, Prefs.ORIENT);
+            Prefs.put(this, Prefs.ORIENT, o == 0 ? 1 : o == 1 ? 2 : 0);
+            applyOrientation();
+            updateUi();
+        });
         findViewById(R.id.btnMirror).setOnClickListener(v -> {
             Prefs.put(this, Prefs.MIRROR_H, !Prefs.b(this, Prefs.MIRROR_H));
             applyStyle();
@@ -204,6 +214,19 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     }
 
     // ---------------------------------------------------------------- look
+
+    /** Locks the screen rotation, or lets it follow the device. */
+    private void applyOrientation() {
+        int req;
+        switch (Prefs.i(this, Prefs.ORIENT)) {
+            case 1: req = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE; break;
+            case 2: req = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT; break;
+            case 3: req = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE; break;
+            case 4: req = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT; break;
+            default: req = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED; break;
+        }
+        setRequestedOrientation(req);
+    }
 
     private void applyStyle() {
         text.setTextSize(TypedValue.COMPLEX_UNIT_SP, fontSp);
@@ -574,6 +597,8 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     private void updateUi() {
         btnPlay.setText(playing ? "⏸" : "▶");
         btnMode.setText(voiceMode ? "🎤 صدا" : "دستی");
+        int orient = Prefs.i(this, Prefs.ORIENT);
+        btnRotate.setText(orient == 0 ? "چرخش آزاد" : orient == 1 || orient == 3 ? "قفل افقی" : "قفل عمودی");
         speedLabel.setText(voiceMode ? "خط" : "سرعت " + speed);
         level.setVisibility(voiceMode ? View.VISIBLE : View.GONE);
         boolean showHeard = voiceMode && Prefs.b(this, Prefs.SHOW_HEARD);
