@@ -2,6 +2,7 @@ package com.voiceprompter.fa;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
@@ -150,7 +151,13 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         });
 
         findViewById(R.id.btnClose).setOnClickListener(v -> finish());
-        btnMode.setOnClickListener(v -> setVoiceMode(!voiceMode));
+        btnMode.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("متن چطور حرکت کنه؟")
+                .setItems(new String[]{
+                        (voiceMode ? "✓ " : "") + "با صدا (متن دنبال صدای من میاد)",
+                        (voiceMode ? "" : "✓ ") + "دستی (سرعت ثابت، با دکمه‌های − و +)"},
+                        (d, which) -> setVoiceMode(which == 0))
+                .show());
         btnPlay.setOnClickListener(v -> togglePlay());
         findViewById(R.id.btnSlower).setOnClickListener(v -> perform(Keys.SLOWER));
         findViewById(R.id.btnFaster).setOnClickListener(v -> perform(Keys.FASTER));
@@ -183,6 +190,13 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
         // settings may have been changed while we were away
         fontSp = Prefs.i(this, Prefs.FONT_SP);
         speed = Prefs.i(this, Prefs.SPEED);
+        boolean wantVoice = Prefs.b(this, Prefs.VOICE_MODE);
+        if (wantVoice != voiceMode) {
+            int w = layoutReady ? currentWord() : anchorWord;
+            voiceMode = wantVoice;
+            tracker.setPosition(w);
+            if (!wantVoice) targetY = posY;
+        }
         applyOrientation();
         applyStyle();
         lastFrame = 0;
@@ -483,6 +497,7 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
     }
 
     private void setVoiceMode(boolean on) {
+        if (on == voiceMode) return;
         int w = layoutReady ? currentWord() : anchorWord;
         playing = false;
         if (on) {
@@ -626,7 +641,7 @@ public class PrompterActivity extends Activity implements Choreographer.FrameCal
 
     private void updateUi() {
         btnPlay.setText(playing ? "⏸" : "▶");
-        btnMode.setText(voiceMode ? "🎤 صدا" : "دستی");
+        btnMode.setText(voiceMode ? "حالت: صدا" : "حالت: دستی");
         int orient = Prefs.i(this, Prefs.ORIENT);
         btnRotate.setText(orient == 0 ? "چرخش آزاد" : orient == 1 || orient == 3 ? "قفل افقی" : "قفل عمودی");
         speedLabel.setText(voiceMode ? "خط" : "سرعت " + speed);

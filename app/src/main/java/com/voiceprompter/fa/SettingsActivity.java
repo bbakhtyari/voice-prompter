@@ -7,11 +7,13 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -35,11 +37,44 @@ public class SettingsActivity extends Activity {
 
     private LinearLayout box;
 
+    private static final String SAMPLE =
+            "این یک متن نمونه برای پیش‌نمایش است.\n"
+            + "اندازه‌ی فونت، فاصله‌ی خط‌ها، حاشیه‌ها و جای متن را همین‌جا ببین.\n"
+            + "هر تغییری که بدهی، همان لحظه در این کادر دیده می‌شود.\n"
+            + "خط زرد کنار کادر، جای خطی است که موقع ضبط می‌خوانی.";
+
+    private FrameLayout preview;
+    private TextView previewText;
+    private View previewMarker;
+    private int previewHeight;
+
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setFitsSystemWindows(true);
+
+        // live preview: shows the text exactly as the prompter will draw it
+        preview = new FrameLayout(this);
+        preview.setBackgroundColor(0xFF000000);
+        previewText = new TextView(this);
+        previewText.setText(SAMPLE);
+        previewText.setTextColor(0xFFFFFFFF);
+        previewText.setTextDirection(View.TEXT_DIRECTION_ANY_RTL);
+        preview.addView(previewText, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        previewMarker = new View(this);
+        previewMarker.setBackgroundColor(getColor(R.color.accent));
+        preview.addView(previewMarker, new FrameLayout.LayoutParams(dp(14), dp(5)));
+        previewHeight = getResources().getDisplayMetrics().heightPixels * 38 / 100;
+        root.addView(preview, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, previewHeight));
+        preview.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol) updatePreview();
+        });
+
         ScrollView sv = new ScrollView(this);
-        sv.setFitsSystemWindows(true);
         box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -47,12 +82,50 @@ public class SettingsActivity extends Activity {
         box.setPadding(p, p, p, p);
         sv.addView(box, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        setContentView(sv);
+        root.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        Button done = new Button(this);
+        done.setText("ذخیره و بازگشت");
+        done.setTextSize(16);
+        done.setOnClickListener(v -> {
+            toast("تنظیمات ذخیره شد");
+            finish();
+        });
+        root.addView(done, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(56)));
+
+        setContentView(root);
         build();
+    }
+
+    /** Redraws the sample text with the current settings. */
+    private void updatePreview() {
+        previewText.setTextSize(TypedValue.COMPLEX_UNIT_SP, Prefs.i(this, Prefs.FONT_SP));
+        previewText.setLineSpacing(0f, Prefs.i(this, Prefs.LINE_SPACING) / 10f);
+        previewText.setTypeface(Fonts.get(this, Prefs.s(this, Prefs.FONT), Prefs.b(this, Prefs.BOLD)));
+        int align = Prefs.i(this, Prefs.ALIGN);
+        previewText.setTextAlignment(View.TEXT_ALIGNMENT_GRAVITY);
+        previewText.setGravity(align == 1 ? Gravity.CENTER_HORIZONTAL : align == 2 ? Gravity.LEFT : Gravity.RIGHT);
+
+        int w = preview.getWidth();
+        if (w == 0) w = getResources().getDisplayMetrics().widthPixels;
+        int side = w * Prefs.i(this, Prefs.MARGIN) / 100;
+        int top = previewHeight * Prefs.i(this, Prefs.READ_POS) / 100;
+        previewText.setPadding(side, top, side, 0);
+        previewMarker.setTranslationY(top + previewText.getLineHeight() / 2f - dp(5) / 2f);
+
+        preview.setScaleX(Prefs.b(this, Prefs.MIRROR_H) ? -1f : 1f);
+        preview.setScaleY(Prefs.b(this, Prefs.MIRROR_V) ? -1f : 1f);
     }
 
     private void build() {
         box.removeAllViews();
+        updatePreview();
+
+        header("حالت کار");
+        toggle("متن با صدای من حرکت کنه", Prefs.VOICE_MODE);
+        note("اگه خاموش باشه، تله‌پرامپتر در «حالت دستی» کار می‌کنه: متن با سرعت ثابت بالا میاد "
+                + "و با دکمه‌ها یا پدال کم و زیادش می‌کنی.");
 
         header("نمایش");
         slider("اندازه‌ی فونت", Prefs.FONT_SP, 16, 200, "");
@@ -121,7 +194,10 @@ public class SettingsActivity extends Activity {
         s.setTextSize(16);
         s.setChecked(Prefs.b(this, key));
         s.setPadding(0, dp(10), 0, dp(10));
-        s.setOnCheckedChangeListener((v, on) -> Prefs.put(this, key, on));
+        s.setOnCheckedChangeListener((v, on) -> {
+            Prefs.put(this, key, on);
+            updatePreview();
+        });
         box.addView(s, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
@@ -143,7 +219,10 @@ public class SettingsActivity extends Activity {
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 int v = min + progress;
                 t.setText(label + ": " + v + suffix);
-                if (fromUser) Prefs.put(SettingsActivity.this, key, v);
+                if (fromUser) {
+                    Prefs.put(SettingsActivity.this, key, v);
+                    updatePreview();
+                }
             }
 
             @Override
@@ -165,6 +244,7 @@ public class SettingsActivity extends Activity {
                 .setItems(options, (d, which) -> {
                     Prefs.put(this, key, which);
                     b.setText(label + ": " + options[which]);
+                    updatePreview();
                 })
                 .show());
         box.addView(b, new LinearLayout.LayoutParams(
